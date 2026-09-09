@@ -3,8 +3,8 @@
 (по умолчанию — по вчерашний день включительно) с диаграммой.
 
 Использование:
-  - планово вызывается из bot_old.py через JobQueue раз в сутки;
-  - вручную — командой /digest в чате (см. bot_old.py).
+  - планово вызывается из bot.py через JobQueue раз в сутки;
+  - вручную — командой /digest в чате (см. bot.py).
 """
 
 import io
@@ -42,44 +42,62 @@ def compute_totals(sheet, upto_date_str: str):
 
 
 def build_chart(totals, title: str) -> bytes:
-    """Рисует горизонтальную столбчатую диаграмму лидерборда, возвращает PNG-байты."""
+    """Рисует lollipop-диаграмму лидерборда (точка + линия), возвращает PNG-байты."""
     if not totals:
         totals = [("Пока нет данных", 0)]
 
-    # переворачиваем, чтобы лидер отображался сверху (barh рисует снизу вверх)
+    # переворачиваем, чтобы лидер отображался сверху
     names = [t[0] for t in totals][::-1]
     values = [t[1] for t in totals][::-1]
-
-    fig_height = max(3, 0.55 * len(names) + 1.2)
-    fig, ax = plt.subplots(figsize=(10, fig_height))
-
-    colors = plt.cm.viridis(
-        [i / max(len(names) - 1, 1) for i in range(len(names))]
-    )
-    bars = ax.barh(names, values, color=colors)
-
     max_val = max(values) if values else 0
-    for bar, value in zip(bars, values):
+    n = len(names)
+
+    # цвета по рангу: 1 место — золото, 2 — серебро, 3 — бронза, остальные — синий
+    colors = []
+    for i in range(n):
+        rank_from_top = n - i  # names перевёрнуты, лидер — последний элемент списка
+        if rank_from_top == 1:
+            colors.append("#FFD700")
+        elif rank_from_top == 2:
+            colors.append("#C0C0C0")
+        elif rank_from_top == 3:
+            colors.append("#CD7F32")
+        else:
+            colors.append("#4C72B0")
+
+    fig_height = max(3.5, 0.75 * n + 1.4)
+    fig, ax = plt.subplots(figsize=(9, fig_height))
+
+    y_pos = list(range(n))
+    ax.hlines(y=y_pos, xmin=0, xmax=values, color=colors, alpha=0.6, linewidth=3)
+    ax.scatter(values, y_pos, color=colors, s=400, zorder=3, edgecolor="white", linewidth=2)
+
+    for i, value in enumerate(values):
         label = f"{value:,}".replace(",", " ")
         ax.text(
-            bar.get_width() + max_val * 0.015,
-            bar.get_y() + bar.get_height() / 2,
+            value + (max_val * 0.035 if max_val else 0.5),
+            i,
             label,
             va="center",
-            fontsize=11,
+            fontsize=14,
+            fontweight="bold",
         )
 
-    ax.set_title(title, fontsize=15, fontweight="bold")
-    ax.set_xlabel("Шаги (сумма)")
-    ax.spines["top"].set_visible(False)
-    ax.spines["right"].set_visible(False)
-    ax.set_xlim(0, max_val * 1.15 if max_val else 1)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(names, fontsize=15)
+    ax.set_xlim(0, max_val * 1.22 if max_val else 1)
+    ax.set_title(title, fontsize=20, fontweight="bold", loc="left")
+    ax.set_xlabel("Шаги (сумма)", fontsize=13)
+    for spine in ("top", "right", "left"):
+        ax.spines[spine].set_visible(False)
+    ax.tick_params(left=False)
     fig.tight_layout()
 
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=150)
     plt.close(fig)
     buf.seek(0)
+    return buf.getvalue()
     return buf.getvalue()
 
 
