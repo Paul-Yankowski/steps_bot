@@ -43,8 +43,33 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
-GOOGLE_CREDENTIALS_PATH = os.environ.get("GOOGLE_CREDENTIALS_PATH", "credentials.json")
 SPREADSHEET_ID = os.environ["SPREADSHEET_ID"]
+
+
+def resolve_credentials_path() -> str:
+    """
+    Определяет путь к JSON-ключу сервисного аккаунта Google.
+
+    Поддерживает два способа задания:
+      - GOOGLE_CREDENTIALS_JSON — содержимое JSON-ключа целиком в переменной
+        окружения (удобно для платформ без "секретных файлов", например
+        Railway) — записывается во временный файл.
+      - GOOGLE_CREDENTIALS_PATH — путь к уже существующему файлу на диске
+        (локальный запуск, Raspberry Pi, Render Secret Files).
+    """
+    raw_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
+    if raw_json:
+        json.loads(raw_json)  # валидация, чтобы упасть с понятной ошибкой сразу
+        tmp = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        tmp.write(raw_json)
+        tmp.close()
+        logger.info("Using Google credentials from GOOGLE_CREDENTIALS_JSON env var")
+        return tmp.name
+
+    return os.environ.get("GOOGLE_CREDENTIALS_PATH", "credentials.json")
+
+
+GOOGLE_CREDENTIALS_PATH = resolve_credentials_path()
 
 sheet = StepsSheet(GOOGLE_CREDENTIALS_PATH, SPREADSHEET_ID)
 
