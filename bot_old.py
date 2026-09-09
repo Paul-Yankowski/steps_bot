@@ -11,22 +11,16 @@ Telegram-бот для шагового марафона.
    и спрашивает подтверждение перезаписи (защита от случайного дублирования).
 5. Каждая запись хранит статус (auto/confirmed/manual) и ссылку на
    исходное сообщение — для разрешения споров.
-6. Раз в сутки (или по команде /digest) бот присылает диаграмму-лидерборд
-   с нарастающим итогом шагов — логика в digest.py.
 
 ВАЖНО: у бота должен быть отключен Privacy Mode (см. README), иначе
 он не увидит сообщения других участников в группе.
-
-Этот файл работает только в режиме polling (без webhook) — подходит для
-локального запуска, Raspberry Pi или Railway.
 """
 
 import json
 import tempfile
 import logging
 import os
-from datetime import datetime, date, time
-from zoneinfo import ZoneInfo
+from datetime import datetime, date
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -41,7 +35,6 @@ from dotenv import load_dotenv
 
 from ocr import recognize_steps
 from sheets import StepsSheet
-import digest as digest_module
 
 load_dotenv()
 
@@ -61,7 +54,6 @@ DIGEST_CHAT_ID = os.environ.get("DIGEST_CHAT_ID")
 DIGEST_TIME = os.environ.get("DIGEST_TIME", "08:00")
 DIGEST_TIMEZONE = os.environ.get("DIGEST_TIMEZONE", "Europe/Helsinki")
 
-
 def resolve_credentials_path() -> str:
     """
     Определяет путь к JSON-ключу сервисного аккаунта Google.
@@ -71,7 +63,7 @@ def resolve_credentials_path() -> str:
         окружения (удобно для платформ без "секретных файлов", например
         Railway) — записывается во временный файл.
       - GOOGLE_CREDENTIALS_PATH — путь к уже существующему файлу на диске
-        (локальный запуск, Raspberry Pi).
+        (локальный запуск, Raspberry Pi, Render Secret Files).
     """
     raw_json = os.environ.get("GOOGLE_CREDENTIALS_JSON")
     if raw_json:
@@ -273,35 +265,6 @@ async def cmd_today(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text("📊 Результаты за сегодня:\n" + "\n".join(lines))
 
 
-async def cmd_digest(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ручной запуск дайджеста прямо сейчас, в текущем чате (для проверки)."""
-    chat_id = update.effective_chat.id
-    await update.effective_message.reply_text("📊 Считаю итоги...")
-    try:
-        await digest_module.send_digest(context.bot, chat_id, sheet)
-    except Exception:
-        logger.exception("Failed to build/send manual digest")
-        await update.effective_message.reply_text(
-            "⚠️ Не удалось сформировать дайджест. Проверь логи бота."
-        )
-
-
-async def cmd_chatid(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Показывает ID текущего чата — пригодится для переменной DIGEST_CHAT_ID."""
-    await update.effective_message.reply_text(
-        f"ID этого чата: `{update.effective_chat.id}`", parse_mode="Markdown"
-    )
-
-
-async def scheduled_digest_job(context: ContextTypes.DEFAULT_TYPE):
-    """Колбэк для JobQueue — вызывается автоматически раз в сутки."""
-    chat_id = context.job.data
-    try:
-        await digest_module.send_digest(context.bot, chat_id, sheet)
-    except Exception:
-        logger.exception("Failed to send scheduled digest to chat %s", chat_id)
-
-
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
     """Ловит все необработанные исключения, чтобы бот не падал молча."""
     logger.error("Unhandled exception while processing update: %s", update, exc_info=context.error)
@@ -318,28 +281,10 @@ def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("today", cmd_today))
-    app.add_handler(CommandHandler("digest", cmd_digest))
-    app.add_handler(CommandHandler("chatid", cmd_chatid))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photo))
     app.add_handler(CallbackQueryHandler(handle_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
     app.add_error_handler(error_handler)
-
-    if DIGEST_CHAT_ID:
-        hh, mm = map(int, DIGEST_TIME.split(":"))
-        run_time = time(hour=hh, minute=mm, tzinfo=ZoneInfo(DIGEST_TIMEZONE))
-        app.job_queue.run_daily(
-            scheduled_digest_job,
-            time=run_time,
-            data=int(DIGEST_CHAT_ID),
-            name="daily_digest",
-        )
-        logger.info(
-            "Daily digest scheduled at %s (%s) for chat %s",
-            DIGEST_TIME, DIGEST_TIMEZONE, DIGEST_CHAT_ID,
-        )
-    else:
-        logger.info("DIGEST_CHAT_ID not set — automatic daily digest disabled (use /digest manually)")
 
     logger.info("Bot started, polling...")
     app.run_polling()

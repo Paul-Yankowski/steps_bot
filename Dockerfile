@@ -17,5 +17,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Render сам подставляет переменную PORT — приложение слушает именно её
-# (см. bot.py: os.environ.get("PORT", 8443))
+# (см. bot_old.py: os.environ.get("PORT", 8443))
 CMD ["python", "bot.py"]
