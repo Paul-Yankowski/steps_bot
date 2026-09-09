@@ -51,7 +51,7 @@ def build_chart(totals, title: str) -> bytes:
     values = [t[1] for t in totals][::-1]
 
     fig_height = max(3, 0.55 * len(names) + 1.2)
-    fig, ax = plt.subplots(figsize=(8, fig_height))
+    fig, ax = plt.subplots(figsize=(10, fig_height))
 
     colors = plt.cm.viridis(
         [i / max(len(names) - 1, 1) for i in range(len(names))]
@@ -66,10 +66,10 @@ def build_chart(totals, title: str) -> bytes:
             bar.get_y() + bar.get_height() / 2,
             label,
             va="center",
-            fontsize=9,
+            fontsize=11,
         )
 
-    ax.set_title(title, fontsize=13, fontweight="bold")
+    ax.set_title(title, fontsize=15, fontweight="bold")
     ax.set_xlabel("Шаги (сумма)")
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
