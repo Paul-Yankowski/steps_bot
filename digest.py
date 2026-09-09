@@ -16,6 +16,7 @@ import matplotlib
 
 matplotlib.use("Agg")  # без GUI — нужно для работы на сервере
 import matplotlib.pyplot as plt
+from matplotlib.patches import FancyBboxPatch
 
 logger = logging.getLogger(__name__)
 
@@ -42,59 +43,79 @@ def compute_totals(sheet, upto_date_str: str):
 
 
 def build_chart(totals, title: str) -> bytes:
-    """Рисует lollipop-диаграмму лидерборда (точка + линия), возвращает PNG-байты."""
+    """
+    Рисует диаграмму-"трек прогресса": светло-серая дорожка на всю ширину
+    + цветной заполненный бар пропорционально месту в рейтинге.
+    Возвращает PNG-байты.
+    """
     if not totals:
         totals = [("Пока нет данных", 0)]
 
     # переворачиваем, чтобы лидер отображался сверху
     names = [t[0] for t in totals][::-1]
     values = [t[1] for t in totals][::-1]
-    max_val = max(values) if values else 0
     n = len(names)
+    max_val = max(values) if any(values) else 1
 
-    # цвета по рангу: 1 место — золото, 2 — серебро, 3 — бронза, остальные — синий
-    colors = []
+    rank_colors = []
     for i in range(n):
-        rank_from_top = n - i  # names перевёрнуты, лидер — последний элемент списка
-        if rank_from_top == 1:
-            colors.append("#FFD700")
-        elif rank_from_top == 2:
-            colors.append("#C0C0C0")
-        elif rank_from_top == 3:
-            colors.append("#CD7F32")
+        rank = n - i  # names перевёрнуты, лидер — последний элемент списка
+        if rank == 1:
+            rank_colors.append("#FFB800")
+        elif rank == 2:
+            rank_colors.append("#9CA3AF")
+        elif rank == 3:
+            rank_colors.append("#B87333")
         else:
-            colors.append("#4C72B0")
+            rank_colors.append("#3B82F6")
 
-    fig_height = max(3.5, 0.75 * n + 1.4)
-    fig, ax = plt.subplots(figsize=(9, fig_height))
+    fig_height = max(3.5, 0.9 * n + 1.4)
+    fig, ax = plt.subplots(figsize=(9.5, fig_height))
 
-    y_pos = list(range(n))
-    ax.hlines(y=y_pos, xmin=0, xmax=values, color=colors, alpha=0.6, linewidth=3)
-    ax.scatter(values, y_pos, color=colors, s=400, zorder=3, edgecolor="white", linewidth=2)
+    bar_h = 0.5
+    for i, (val, color) in enumerate(zip(values, rank_colors)):
+        # фон-дорожка на всю ширину
+        track = FancyBboxPatch(
+            (0, i - bar_h / 2), max_val, bar_h,
+            boxstyle=f"round,pad=0,rounding_size={bar_h / 2}",
+            facecolor="#EEEEEE", edgecolor="none", zorder=1,
+        )
+        ax.add_patch(track)
 
-    for i, value in enumerate(values):
-        label = f"{value:,}".replace(",", " ")
+        # заполненная часть (минимальная ширина — чтобы даже 0 было видно скруглённым краем)
+        fill_w = max(val, max_val * 0.04)
+        fill_rounding = min(bar_h / 2, fill_w / 2)  # не даём скруглению вылезти за пределы узкого бара
+        fill = FancyBboxPatch(
+            (0, i - bar_h / 2), fill_w, bar_h,
+            boxstyle=f"round,pad=0,rounding_size={fill_rounding}",
+            facecolor=color, edgecolor="none", zorder=2,
+        )
+        ax.add_patch(fill)
+
+        # номер места слева
         ax.text(
-            value + (max_val * 0.035 if max_val else 0.5),
-            i,
-            label,
-            va="center",
-            fontsize=14,
-            fontweight="bold",
+            -max_val * 0.02, i, str(n - i),
+            ha="right", va="center", fontsize=15, fontweight="bold", color=color,
+        )
+        # значение справа от дорожки
+        label = f"{val:,}".replace(",", " ")
+        ax.text(
+            max_val * 1.02, i, label,
+            va="center", fontsize=14, fontweight="bold",
         )
 
-    ax.set_yticks(y_pos)
+    ax.set_yticks(range(n))
     ax.set_yticklabels(names, fontsize=15)
-    ax.set_xlim(0, max_val * 1.22 if max_val else 1)
+    ax.set_xlim(-max_val * 0.15, max_val * 1.25)
+    ax.set_ylim(-0.7, n - 0.3)
     ax.set_title(title, fontsize=20, fontweight="bold", loc="left")
-    ax.set_xlabel("Шаги (сумма)", fontsize=13)
-    for spine in ("top", "right", "left"):
-        ax.spines[spine].set_visible(False)
-    ax.tick_params(left=False)
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.set_xticks([])
     fig.tight_layout()
 
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150)
+    fig.savefig(buf, format="png", dpi=150, facecolor="white")
     plt.close(fig)
     buf.seek(0)
     return buf.getvalue()
