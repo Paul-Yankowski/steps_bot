@@ -1,0 +1,17 @@
+[Unit]
+Description=Telegram Steps Marathon Bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# ЗАМЕНИ на своего пользователя и реальный путь к проекту
+User=pi
+WorkingDirectory=/home/pi/steps_bot
+ExecStart=/home/pi/steps_bot/venv/bin/python /home/pi/steps_bot/bot.py
+Restart=always
+RestartSec=5
+EnvironmentFile=/home/pi/steps_bot/.env
+
+[Install]
+WantedBy=multi-user.target

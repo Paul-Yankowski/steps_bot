@@ -1,0 +1,9 @@
+python-telegram-bot>=21.6
+pytesseract>=0.3.13
+Pillow>=10.4.0
+opencv-python-headless>=4.10.0
+numpy>=1.26,<3
+gspread>=6.1.2
+google-auth>=2.34.0
+python-dotenv>=1.0.1
+tenacity>=8.2
