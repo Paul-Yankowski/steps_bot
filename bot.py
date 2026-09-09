@@ -16,6 +16,8 @@ Telegram-бот для шагового марафона.
 он не увидит сообщения других участников в группе.
 """
 
+import json
+import tempfile
 import logging
 import os
 from datetime import datetime, date
